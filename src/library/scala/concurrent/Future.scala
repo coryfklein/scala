@@ -502,6 +502,21 @@ object Future {
     }.map(_.result())(InternalCallbackExecutor)
   }
 
+  /** Version of `Future.sequence` that preserves the order of the input collection.
+   */
+  def sequenceOrdered[A, M[X] <: Iterable[X]](in: M[Future[A]])(implicit cbf: CanBuildFrom[Iterable[A], A, M[A]], executor: ExecutionContext): Future[M[A]] = {
+    val builder = cbf(in)
+
+    in.zipWithIndex
+      .map(_.swap)
+      .foldLeft(Future.successful(mutable.TreeSet.empty[(Int, A)])) {
+      (fr, fa) => for (r <- fr; a <- fa) yield (r += a)
+    }.map({ set =>
+      builder ++= set.toSeq.map(_._2)
+      builder.result
+    })
+  }
+
   /** Returns a new `Future` to the result of the first future in the list that is completed.
    */
   def firstCompletedOf[T](futures: TraversableOnce[Future[T]])(implicit executor: ExecutionContext): Future[T] = {
